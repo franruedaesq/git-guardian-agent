@@ -1,22 +1,22 @@
-# .github/workflows/build-agent.yml
-
 name: "Agent CI - Build, Test, and Publish"
 
 on:
   push:
     branches:
       - main
-  pull_request:
-    branches:
-      - main
+
+# Store the ECR repository URL here for easy access
+env:
+  ECR_REPOSITORY: 183611507583.dkr.ecr.eu-central-1.amazonaws.com/git-guardian-agent
+  AWS_REGION: eu-central-1
 
 permissions:
-  id-token: write # This is required for requesting the JWT
-  contents: read # This is required for actions/checkout
+  id-token: write
+  contents: read
 
 jobs:
-  build-and-test:
-    name: Build and Test Agent
+  build-and-publish:
+    name: Build, Test, and Publish Agent
     runs-on: ubuntu-latest
 
     steps:
@@ -28,16 +28,29 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Install Dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Unit Tests
+        run: pytest
+
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::183611507583:role/GitGuardianAgent-GitHubActionsRole
-          aws-region: eu-central-1
+          role-to-assume: ${{ secrets.AWS_IAM_ROLE_ARN }} # Using a secret for the ARN
+          aws-region: ${{ env.AWS_REGION }}
 
-      - name: Run placeholder script
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push image to Amazon ECR
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }} # Use the commit SHA as the tag
+          LATEST_TAG: latest
+          VERSION_TAG: v1.0.0
         run: |
-          echo "CI Pipeline Skeleton is running."
-          python scripts/hello.py
-          echo "---"
-          echo "Verifying AWS authentication..."
-          aws sts get-caller-identity
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:$LATEST_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:$VERSION_TAG .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY --all-tags

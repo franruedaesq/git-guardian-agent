@@ -107,12 +107,11 @@ resource "aws_iam_role" "github_actions_role" {
 }
 
 # 4. IAM Policy defining what the GitHub Actions role is allowed to do
-data "aws_iam_policy_document" "ecr_push_policy" {
+data "aws_iam_policy_document" "agent_permissions" {
+  # ECR Permissions
   statement {
-    effect = "Allow"
-    actions = [
-      "ecr:GetAuthorizationToken",
-    ]
+    effect    = "Allow"
+    actions   = ["ecr:GetAuthorizationToken"]
     resources = ["*"]
   }
   statement {
@@ -126,16 +125,27 @@ data "aws_iam_policy_document" "ecr_push_policy" {
     ]
     resources = [aws_ecr_repository.agent_repo.arn]
   }
+
+  # Bedrock Permissions
+  statement {
+    effect = "Allow"
+    actions = [
+      "bedrock:InvokeModel"
+    ]
+    # This allows the role to invoke the specific Claude 3 Sonnet model
+    # resources = ["arn:aws:bedrock:eu-central-1::foundation-model/anthropic.claude-3-sonnet-v1:0"]
+    resources = ["arn:aws:bedrock:eu-central-1:183611507583:inference-profile/eu.anthropic.claude-3-7-sonnet-20250219-v1:0"]
+  }
 }
 
-resource "aws_iam_policy" "github_actions_ecr_policy" {
-  name   = "GitGuardianAgent-GitHubECRPolicy"
-  policy = data.aws_iam_policy_document.ecr_push_policy.json
+resource "aws_iam_policy" "github_actions_agent_policy" {
+  name   = "GitGuardianAgent-GitHubActionsPolicy"
+  policy = data.aws_iam_policy_document.agent_permissions.json
 }
 
-resource "aws_iam_role_policy_attachment" "attach_ecr_policy" {
+resource "aws_iam_role_policy_attachment" "attach_agent_policy" {
   role       = aws_iam_role.github_actions_role.name
-  policy_arn = aws_iam_policy.github_actions_ecr_policy.arn
+  policy_arn = aws_iam_policy.github_actions_agent_policy.arn
 }
 
 # 5. Outputs - We'll need these values later

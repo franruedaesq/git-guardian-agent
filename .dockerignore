@@ -1,0 +1,12 @@
+**pycache**/
+_.pyc
+_.pyo
+.env
+.git
+.gitignore
+.dockerignore
+Dockerfile
+README.md
+tests/
+terraform/
+venv/
