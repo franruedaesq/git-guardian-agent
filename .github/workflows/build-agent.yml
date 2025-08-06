@@ -1,0 +1,43 @@
+# .github/workflows/build-agent.yml
+
+name: "Agent CI - Build, Test, and Publish"
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  id-token: write # This is required for requesting the JWT
+  contents: read # This is required for actions/checkout
+
+jobs:
+  build-and-test:
+    name: Build and Test Agent
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::183611507583:role/GitGuardianAgent-GitHubActionsRole
+          aws-region: eu-central-1
+
+      - name: Run placeholder script
+        run: |
+          echo "CI Pipeline Skeleton is running."
+          python scripts/hello.py
+          echo "---"
+          echo "Verifying AWS authentication..."
+          aws sts get-caller-identity
