@@ -96,7 +96,18 @@ data "aws_iam_policy_document" "github_assume_role" {
       variable = "token.actions.githubusercontent.com:sub"
       # IMPORTANT: Make sure this still correctly points to your repository
       # Replace <YourGitHubOrg>/<YourRepoName> if you haven't already
-      values = ["repo:franruedaesq/git-guardian-agent:*"]
+      values = ["repo:franruedaesq/git-guardian-agent:*", "repo:franruedaesq/dummy-repo:*"]
+    }
+
+
+  }
+
+  statement {
+    effect  = "Allow"
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "AWS"
+      identifiers = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:user/qlora-user"]
     }
   }
 }
@@ -133,8 +144,13 @@ data "aws_iam_policy_document" "agent_permissions" {
       "bedrock:InvokeModel"
     ]
     # This allows the role to invoke the specific Claude 3 Sonnet model
-    # resources = ["arn:aws:bedrock:eu-central-1::foundation-model/anthropic.claude-3-sonnet-v1:0"]
-    resources = ["arn:aws:bedrock:eu-central-1:183611507583:inference-profile/eu.anthropic.claude-3-7-sonnet-20250219-v1:0"]
+    resources = [
+      "arn:aws:bedrock:eu-central-1:183611507583:inference-profile/eu.anthropic.claude-3-7-sonnet-20250219-v1:0",
+
+      "arn:aws:bedrock:eu-north-1::foundation-model/anthropic.claude-3-7-sonnet-20250219-v1:0",
+
+      "arn:aws:bedrock:*::foundation-model/anthropic.claude-3-7-sonnet-20250219-v1:0"
+    ]
   }
 }
 
