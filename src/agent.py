@@ -8,7 +8,7 @@ import boto3
 class GuardianAgent:
     def __init__(
         self,
-        model_id="eu.anthropic.claude-3-7-sonnet-20250219-v1:0",
+        model_id="anthropic.claude-3-7-sonnet-20250219-v1:0",
         region="eu-central-1",
     ):
 
