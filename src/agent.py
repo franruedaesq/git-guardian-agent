@@ -8,9 +8,10 @@ import boto3
 class GuardianAgent:
     def __init__(
         self,
-        model_id="arn:aws:bedrock:eu-central-1:183611507583:inference-profile/eu.anthropic.claude-3-7-sonnet-20250219-v1:0",
+        model_id="eu.anthropic.claude-3-7-sonnet-20250219-v1:0",
         region="eu-central-1",
     ):
+
         self.model_id = model_id
         self.bedrock_client = boto3.client(
             service_name="bedrock-runtime", region_name=region
