@@ -144,4 +144,7 @@ class GuardianAgent:
         }
         self._upload_log_to_s3(log_data)
 
+        with open("result.json", "w") as f:
+            json.dump(decision, f, indent=2)
+
         return decision
