@@ -169,6 +169,7 @@ class GuardianAgent:
         start_time = time.time()
         input_data = self._read_input(filepath)
 
+        repo_name = input_data.get("repository_name", "unknown_repo")
         try:
             commit_message = input_data.get("commit_message", "")
             diff_text = input_data.get("commit_diff", "")
