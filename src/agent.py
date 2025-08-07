@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import sys
 from datetime import datetime, timezone
 
 import boto3
@@ -26,13 +27,14 @@ class GuardianAgent:
     def _upload_log_to_s3(self, log_data):
         """Uploads the detailed transaction log to S3."""
         if not self.log_bucket:
+            # Send this warning to stderr
             print(
-                "Warning: S3_LOG_BUCKET environment variable not set. Skipping log upload."
+                "Warning: S3_LOG_BUCKET environment variable not set. Skipping log upload.",
+                file=sys.stderr,
             )
             return
 
         commit_hash = log_data["input"]["commit_hash"]
-        # Use the commit hash as the filename for uniqueness
         log_key = f"{commit_hash}.json"
 
         try:
@@ -42,9 +44,14 @@ class GuardianAgent:
                 Body=json.dumps(log_data, indent=2),
                 ContentType="application/json",
             )
-            print(f"Successfully uploaded log to s3://{self.log_bucket}/{log_key}")
+            # Send this success message to stderr
+            print(
+                f"Successfully uploaded log to s3://{self.log_bucket}/{log_key}",
+                file=sys.stderr,
+            )
         except Exception as e:
-            print(f"Error uploading log to S3: {str(e)}")
+            # Send this error message to stderr
+            print(f"Error uploading log to S3: {str(e)}", file=sys.stderr)
 
     def _read_input(self, filepath):
         """Reads the input JSON file containing commit data."""
@@ -143,8 +150,5 @@ class GuardianAgent:
             },
         }
         self._upload_log_to_s3(log_data)
-
-        with open("result.json", "w") as f:
-            json.dump(decision, f, indent=2)
 
         return decision
