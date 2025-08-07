@@ -1,0 +1,76 @@
+name: Reusable Git Guardian Check
+
+on:
+  workflow_call:
+    inputs:
+      agent_tag:
+        description: "The tag of the git-guardian-agent image to use"
+        required: false
+        type: string
+        default: "latest"
+    secrets:
+      AWS_IAM_ROLE_ARN:
+        required: true
+      S3_LOG_BUCKET:
+        required: true
+      PUSHGATEWAY_URL:
+        required: false
+
+jobs:
+  validate-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with: { fetch-depth: 2 }
+
+      - name: Prepare Commit Data
+        run: |
+          # This script remains the same as before
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+          COMMIT_HASH=$(git rev-parse HEAD)
+          REPO_NAME=${{ github.repository }}
+          if [ $(git rev-list --count HEAD) -eq 1 ]; then
+            COMMIT_DIFF=$(git show --pretty="" --no-patch)
+          else
+            COMMIT_DIFF=$(git diff HEAD~1 HEAD)
+          fi
+          jq -n \
+            --arg msg "$COMMIT_MSG" --arg diff "$COMMIT_DIFF" \
+            --arg hash "$COMMIT_HASH" --arg repo "$REPO_NAME" \
+            '{commit_message: $msg, commit_diff: $diff, commit_hash: $hash, repository_name: $repo}' > commit-data.json
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_IAM_ROLE_ARN }}
+          aws-region: eu-central-1 # Or your preferred region
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Run Git Guardian Agent
+        run: |
+          docker run --rm \
+            -v "$(pwd)/commit-data.json:/app/input.json" \
+            -e AWS_REGION -e AWS_ACCESS_KEY_ID \
+            -e AWS_SECRET_ACCESS_KEY -e AWS_SESSION_TOKEN \
+            -e S3_LOG_BUCKET=${{ secrets.S3_LOG_BUCKET }} \
+            -e PUSHGATEWAY_URL=${{ secrets.PUSHGATEWAY_URL }} \
+            183611507583.dkr.ecr.eu-central-1.amazonaws.com/git-guardian-agent:${{ inputs.agent_tag }} /app/input.json > result.json
+
+      - name: Check Agent Result
+        run: |
+          # This script also remains the same
+          if [ ! -f result.json ] || ! jq . result.json > /dev/null 2>&1; then
+            echo "::error::Agent did not produce valid JSON output."
+            exit 1
+          fi
+          STATUS=$(jq -r .status result.json)
+          REASON=$(jq -r .reason result.json)
+          if [ "$STATUS" == "FAIL" ]; then
+            echo "::error::Guardian Agent check failed: $REASON"
+            exit 1
+          else
+            echo "Guardian Agent check passed."
+          fi
