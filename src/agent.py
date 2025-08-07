@@ -1,6 +1,7 @@
-# src/agent.py
 import json
+import os
 import re
+from datetime import datetime, timezone
 
 import boto3
 
@@ -15,11 +16,35 @@ class GuardianAgent:
         ),
         region="eu-central-1",
     ):
-
         self.model_id = model_id
         self.bedrock_client = boto3.client(
             service_name="bedrock-runtime", region_name=region
         )
+        self.s3_client = boto3.client("s3")
+        self.log_bucket = os.getenv("S3_LOG_BUCKET")
+
+    def _upload_log_to_s3(self, log_data):
+        """Uploads the detailed transaction log to S3."""
+        if not self.log_bucket:
+            print(
+                "Warning: S3_LOG_BUCKET environment variable not set. Skipping log upload."
+            )
+            return
+
+        commit_hash = log_data["input"]["commit_hash"]
+        # Use the commit hash as the filename for uniqueness
+        log_key = f"{commit_hash}.json"
+
+        try:
+            self.s3_client.put_object(
+                Bucket=self.log_bucket,
+                Key=log_key,
+                Body=json.dumps(log_data, indent=2),
+                ContentType="application/json",
+            )
+            print(f"Successfully uploaded log to s3://{self.log_bucket}/{log_key}")
+        except Exception as e:
+            print(f"Error uploading log to S3: {str(e)}")
 
     def _read_input(self, filepath):
         """Reads the input JSON file containing commit data."""
@@ -92,20 +117,31 @@ class GuardianAgent:
 
     def analyze(self, filepath):
         """Main analysis method."""
-        try:
-            data = self._read_input(filepath)
-            commit_message = data.get("commit_message", "")
-            diff_text = data.get("commit_diff", "")
+        input_data = self._read_input(filepath)
 
-            # 1. Hybrid Approach: Run fast regex scan first
+        try:
+            commit_message = input_data.get("commit_message", "")
+            diff_text = input_data.get("commit_diff", "")
+
             regex_result = self._run_regex_scan(diff_text)
             if regex_result:
-                return {"status": "FAIL", "reason": regex_result}
-
-            # 2. If regex passes, use the more intelligent LLM
-            prompt = self._construct_prompt(commit_message, diff_text)
-            result = self._invoke_llm(prompt)
-            return result
+                decision = {"status": "FAIL", "reason": regex_result}
+            else:
+                prompt = self._construct_prompt(commit_message, diff_text)
+                decision = self._invoke_llm(prompt)
 
         except Exception as e:
-            return {"status": "FAIL", "reason": f"Internal agent error: {str(e)}"}
+            decision = {"status": "FAIL", "reason": f"Internal agent error: {str(e)}"}
+
+        # NEW: Construct and upload the final log
+        log_data = {
+            "input": input_data,
+            "decision": decision,
+            "metadata": {
+                "agent_version": "1.1.0",  # We can version our agent
+                "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+            },
+        }
+        self._upload_log_to_s3(log_data)
+
+        return decision

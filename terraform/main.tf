@@ -152,6 +152,15 @@ data "aws_iam_policy_document" "agent_permissions" {
       "arn:aws:bedrock:*::foundation-model/anthropic.claude-3-7-sonnet-20250219-v1:0"
     ]
   }
+
+  statement {
+    effect = "Allow"
+    actions = [
+      "s3:PutObject"
+    ]
+    #  the /* at the end to allow writing objects inside the bucket
+    resources = ["${aws_s3_bucket.agent_logs.arn}/*"]
+  }
 }
 
 resource "aws_iam_policy" "github_actions_agent_policy" {
