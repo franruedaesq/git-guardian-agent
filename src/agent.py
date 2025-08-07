@@ -2,12 +2,10 @@ import json
 import os
 import re
 import sys
-import time  # New import
+import time
 from datetime import datetime, timezone
 
 import boto3
-
-# New imports from prometheus_client
 from prometheus_client import CollectorRegistry, Counter, Gauge, push_to_gateway
 
 
@@ -69,7 +67,6 @@ class GuardianAgent:
     def _upload_log_to_s3(self, log_data):
         """Uploads the detailed transaction log to S3."""
         if not self.log_bucket:
-            # Send this warning to stderr
             print(
                 "Warning: S3_LOG_BUCKET environment variable not set. Skipping log upload.",
                 file=sys.stderr,
@@ -86,13 +83,11 @@ class GuardianAgent:
                 Body=json.dumps(log_data, indent=2),
                 ContentType="application/json",
             )
-            # Send this success message to stderr
             print(
                 f"Successfully uploaded log to s3://{self.log_bucket}/{log_key}",
                 file=sys.stderr,
             )
         except Exception as e:
-            # Send this error message to stderr
             print(f"Error uploading log to S3: {str(e)}", file=sys.stderr)
 
     def _read_input(self, filepath):
@@ -102,10 +97,8 @@ class GuardianAgent:
 
     def _run_regex_scan(self, diff_text):
         """Performs a quick, deterministic regex scan for obvious secrets."""
-        # AWS Access Key ID pattern
         aws_key_pattern = re.compile(r"(?<![A-Z0-9])[A-Z0-9]{20}(?![A-Z0-9])")
 
-        # A simple pattern for high-entropy strings in quotes (30+ alphanumeric chars)
         generic_secret_pattern = re.compile(r'["\'][a-zA-Z0-9]{30,}["\']')
 
         if aws_key_pattern.search(diff_text):
@@ -153,12 +146,9 @@ class GuardianAgent:
                 body=body, modelId=self.model_id
             )
             response_body = json.loads(response.get("body").read())
-            # The actual response is nested inside the 'content' list
             llm_output_text = response_body["content"][0]["text"]
-            # The LLM should return a JSON string, so we parse it.
             return json.loads(llm_output_text)
         except Exception as e:
-            # If the LLM fails or returns malformed JSON, we fail safe
             return {
                 "status": "FAIL",
                 "reason": f"Internal agent error: Could not process LLM response. Details: {str(e)}",
@@ -184,12 +174,11 @@ class GuardianAgent:
         except Exception as e:
             decision = {"status": "FAIL", "reason": f"Internal agent error: {str(e)}"}
 
-        # NEW: Construct and upload the final log
         log_data = {
             "input": input_data,
             "decision": decision,
             "metadata": {
-                "agent_version": "1.1.0",  # We can version our agent
+                "agent_version": "1.1.0",
                 "timestamp_utc": datetime.now(timezone.utc).isoformat(),
             },
         }

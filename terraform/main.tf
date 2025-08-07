@@ -9,7 +9,6 @@ terraform {
   }
 }
 
-# Configure the AWS Provider
 provider "aws" {
   region = "eu-central-1" # preferred AWS region
 }
@@ -85,17 +84,14 @@ data "aws_iam_policy_document" "github_assume_role" {
     actions = ["sts:AssumeRoleWithWebIdentity"]
 
     principals {
-      type = "Federated"
-      # This now correctly constructs the ARN for the GitHub OIDC provider
-      # It uses the account ID we fetched with the aws_caller_identity data source
+      type        = "Federated"
       identifiers = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:oidc-provider/token.actions.githubusercontent.com"]
     }
 
     condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
-      # IMPORTANT: Make sure this still correctly points to your repository
-      # Replace <YourGitHubOrg>/<YourRepoName> if you haven't already
+      # Replace <YourGitHubOrg>/<YourRepoName> 
       values = ["repo:franruedaesq/git-guardian-agent:*", "repo:franruedaesq/dummy-repo:*"]
     }
 
@@ -119,7 +115,6 @@ resource "aws_iam_role" "github_actions_role" {
 
 # 4. IAM Policy defining what the GitHub Actions role is allowed to do
 data "aws_iam_policy_document" "agent_permissions" {
-  # ECR Permissions
   statement {
     effect    = "Allow"
     actions   = ["ecr:GetAuthorizationToken"]
@@ -173,7 +168,7 @@ resource "aws_iam_role_policy_attachment" "attach_agent_policy" {
   policy_arn = aws_iam_policy.github_actions_agent_policy.arn
 }
 
-# 5. Outputs - We'll need these values later
+# 5. Outputs
 output "ecr_repository_url" {
   value       = aws_ecr_repository.agent_repo.repository_url
   description = "The URL of the ECR repository."
@@ -204,7 +199,6 @@ output "label_studio_secret_key" {
 # --- LABEL STUDIO RESOURCES ---
 
 # 6. IAM User for Label Studio
-# This creates a dedicated user account for the Label Studio application.
 resource "aws_iam_user" "label_studio_user" {
   name = "label-studio-service-user"
   tags = {
@@ -213,7 +207,6 @@ resource "aws_iam_user" "label_studio_user" {
 }
 
 # 7. IAM Policy for the Label Studio User
-# This policy grants the exact permissions needed to read logs and write annotations.
 data "aws_iam_policy_document" "label_studio_s3_policy_document" {
   statement {
     sid    = "LabelStudioS3Access"
@@ -243,20 +236,18 @@ resource "aws_iam_user_policy_attachment" "label_studio_attach" {
 }
 
 # 9. Create an Access Key for the user
-# This generates the credentials Label Studio will use to authenticate.
 resource "aws_iam_access_key" "label_studio_key" {
   user = aws_iam_user.label_studio_user.name
 }
 
 # 10. CORS Configuration for the S3 Logging Bucket
-# This allows the Label Studio web interface to directly access bucket data.
 resource "aws_s3_bucket_cors_configuration" "agent_logs_cors" {
   bucket = aws_s3_bucket.agent_logs.id
 
   cors_rule {
     allowed_headers = ["*"]
-    allowed_methods = ["GET", "HEAD"] # GET is sufficient as per docs, but HEAD is good practice
-    allowed_origins = ["*"]           # For local testing; for production, change to your Label Studio URL
+    allowed_methods = ["GET", "HEAD"]
+    allowed_origins = ["*"]
     expose_headers  = ["ETag"]
     max_age_seconds = 3000
   }
