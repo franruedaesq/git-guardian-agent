@@ -2,9 +2,13 @@ import json
 import os
 import re
 import sys
+import time  # New import
 from datetime import datetime, timezone
 
 import boto3
+
+# New imports from prometheus_client
+from prometheus_client import CollectorRegistry, Counter, Gauge, push_to_gateway
 
 
 class GuardianAgent:
@@ -23,6 +27,44 @@ class GuardianAgent:
         )
         self.s3_client = boto3.client("s3")
         self.log_bucket = os.getenv("S3_LOG_BUCKET")
+        self.pushgateway_url = os.getenv("PUSHGATEWAY_URL")
+
+    def _push_metrics(self, duration, decision, repo_name):
+        """Pushes execution metrics to a Prometheus Pushgateway."""
+        if not self.pushgateway_url:
+            print(
+                "Warning: PUSHGATEWAY_URL not set. Skipping metrics push.",
+                file=sys.stderr,
+            )
+            return
+
+        registry = CollectorRegistry()
+
+        g = Gauge(
+            "agent_execution_duration_seconds",
+            "Time taken for the agent to complete analysis",
+            registry=registry,
+        )
+        g.set(duration)
+
+        c = Counter(
+            "agent_decisions_total",
+            "Total number of agent decisions",
+            ["status", "repository"],
+            registry=registry,
+        )
+        c.labels(status=decision.get("status", "ERROR"), repository=repo_name).inc()
+
+        try:
+            push_to_gateway(
+                self.pushgateway_url, job="git-guardian-agent", registry=registry
+            )
+            print(
+                f"Successfully pushed metrics to {self.pushgateway_url}",
+                file=sys.stderr,
+            )
+        except Exception as e:
+            print(f"Error pushing metrics to Pushgateway: {str(e)}", file=sys.stderr)
 
     def _upload_log_to_s3(self, log_data):
         """Uploads the detailed transaction log to S3."""
@@ -124,6 +166,7 @@ class GuardianAgent:
 
     def analyze(self, filepath):
         """Main analysis method."""
+        start_time = time.time()
         input_data = self._read_input(filepath)
 
         try:
@@ -150,5 +193,7 @@ class GuardianAgent:
             },
         }
         self._upload_log_to_s3(log_data)
+        duration = time.time() - start_time
+        self._push_metrics(duration, decision, repo_name)
 
         return decision

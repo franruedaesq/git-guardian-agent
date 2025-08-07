@@ -188,3 +188,76 @@ output "github_actions_iam_role_arn" {
   value       = aws_iam_role.github_actions_role.arn
   description = "The ARN of the IAM Role for GitHub Actions."
 }
+
+output "label_studio_access_key_id" {
+  value       = aws_iam_access_key.label_studio_key.id
+  description = "The Access Key ID for the Label Studio user."
+}
+
+output "label_studio_secret_key" {
+  value       = aws_iam_access_key.label_studio_key.secret
+  description = "The Secret Access Key for the Label Studio user."
+  sensitive   = true # This prevents Terraform from showing it in normal output
+}
+
+
+# --- LABEL STUDIO RESOURCES ---
+
+# 6. IAM User for Label Studio
+# This creates a dedicated user account for the Label Studio application.
+resource "aws_iam_user" "label_studio_user" {
+  name = "label-studio-service-user"
+  tags = {
+    Project = "Git Guardian Agent"
+  }
+}
+
+# 7. IAM Policy for the Label Studio User
+# This policy grants the exact permissions needed to read logs and write annotations.
+data "aws_iam_policy_document" "label_studio_s3_policy_document" {
+  statement {
+    sid    = "LabelStudioS3Access"
+    effect = "Allow"
+    actions = [
+      "s3:ListBucket",
+      "s3:GetObject",
+      "s3:PutObject",
+      "s3:DeleteObject"
+    ]
+    resources = [
+      aws_s3_bucket.agent_logs.arn,
+      "${aws_s3_bucket.agent_logs.arn}/*" # Important: grants access to objects within the bucket
+    ]
+  }
+}
+
+resource "aws_iam_policy" "label_studio_s3_policy" {
+  name   = "LabelStudio-S3-Policy"
+  policy = data.aws_iam_policy_document.label_studio_s3_policy_document.json
+}
+
+# 8. Attach the policy to the user
+resource "aws_iam_user_policy_attachment" "label_studio_attach" {
+  user       = aws_iam_user.label_studio_user.name
+  policy_arn = aws_iam_policy.label_studio_s3_policy.arn
+}
+
+# 9. Create an Access Key for the user
+# This generates the credentials Label Studio will use to authenticate.
+resource "aws_iam_access_key" "label_studio_key" {
+  user = aws_iam_user.label_studio_user.name
+}
+
+# 10. CORS Configuration for the S3 Logging Bucket
+# This allows the Label Studio web interface to directly access bucket data.
+resource "aws_s3_bucket_cors_configuration" "agent_logs_cors" {
+  bucket = aws_s3_bucket.agent_logs.id
+
+  cors_rule {
+    allowed_headers = ["*"]
+    allowed_methods = ["GET", "HEAD"] # GET is sufficient as per docs, but HEAD is good practice
+    allowed_origins = ["*"]           # For local testing; for production, change to your Label Studio URL
+    expose_headers  = ["ETag"]
+    max_age_seconds = 3000
+  }
+}
